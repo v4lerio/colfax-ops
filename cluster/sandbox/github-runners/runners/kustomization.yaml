@@ -2,13 +2,4 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: actions-runner-system
 resources:
-  - runner-bookmarky-api.yaml
-  - runner-bookmarky-web.yaml
-  - runner-lan-nanny.yaml
-  # - runner-polite-lib.yaml
-  # - runner-colfax-ops.yaml
-  # - runner-private-ops.yaml
-  # - runner-polite-cicd.yaml
-  # - runner-quigley-api.yaml
-# - runner-cver.yaml
-# - runner-dyndns.yaml
+  - ./active

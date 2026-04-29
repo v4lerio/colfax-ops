@@ -5,9 +5,11 @@ resources:
 - argocd.yaml
 - cert-manager.yaml
 - nfs-client.yaml
-- nfs-client-zeta.yaml
 - fluentbit.yaml
-- ingress-public.yaml
-- ingress-private.yaml
-- loki.yaml
+- gateway-api-crds.yaml
+- nginx-gateway-fabric-private.yaml
+- nginx-gateway-fabric-public.yaml
 - prometheus-stack.yaml
+- blackbox-exporter.yaml
+- sealed-secrets.yaml
+- metallb.yaml

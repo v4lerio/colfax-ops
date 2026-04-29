@@ -1,0 +1,11 @@
+apiVersion: v2
+name: nginx-gateway-fabric-public
+description: NGINX Gateway Fabric - public internet-facing gateway
+type: application
+version: 0.0.1
+appVersion: 2.5.1
+
+dependencies:
+- name: nginx-gateway-fabric
+  repository: oci://ghcr.io/nginx/charts
+  version: 2.5.1

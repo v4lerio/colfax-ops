@@ -1,15 +1,39 @@
-# apiVersion: v1
-# kind: PersistentVolume
-# metadata:
-#   name: prometheus-store
-# spec:
-#   capacity:
-#     storage: 50Gi
-#   volumeMode: Filesystem
-#   storageClassName: nfs-client
-#   accessModes:
-#     - ReadWriteOnce
-#   persistentVolumeReclaimPolicy: Retain
-#   nfs:
-#     path: /mnt/media-1/container-data/prometheus-db
-#     server: 192.168.50.51
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: prometheus-db
+  namespace: longhorn-system
+spec:
+  numberOfReplicas: 1
+  size: "64424509440"  # 60Gi
+  frontend: blockdev
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-db
+spec:
+  capacity:
+    storage: 60Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn
+  csi:
+    driver: driver.longhorn.io
+    volumeHandle: prometheus-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-prometheusstack-kube-prome-prometheus-db-prometheus-prometheusstack-kube-prome-prometheus-0
+  namespace: monitoring
+spec:
+  storageClassName: longhorn
+  volumeName: prometheus-db
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 60Gi

@@ -1,0 +1,34 @@
+# Argo Workflows Helm
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argoworkflows
+spec:
+  project: default
+  source:
+    repoURL: "git@github.com:politeauthority/private-ops.git"
+    path: argo-workflows
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values-colfax.yaml
+  sources: []
+  destination:
+    namespace: argo-workflows
+    name: in-cluster
+  ignoreDifferences:
+    - group: "*"
+      kind: "*"
+      jsonPointers:
+        - /metadata/labels
+        - /metadata/annotations
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+      jsonPointers:
+        - /spec/endpoints/0/tlsConfig
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -6,11 +6,23 @@ spec:
   project: default
   source:
     repoURL: 'git@github.com:politeauthority/private-ops.git'
-    path: synapse/
+    path: synapse/matrix-stack
     targetRevision: main
+    helm:
+      valueFiles:
+        - ../values-colfax.yaml
   destination:
     namespace: synapse
     name: in-cluster
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: synapse-synapse-main
+      jsonPointers:
+        - /spec/updateStrategy/rollingUpdate
   syncPolicy:
+    automated:
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true

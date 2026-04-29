@@ -12,9 +12,28 @@ spec:
       labels:
         app: mosquitto
     spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - galapago
+      imagePullSecrets:
+        - name: harbor-registry
       containers:
       - name: mosquitto
-        image: eclipse-mosquitto
+        image: harbor.squid-ink.us/docker-hub/eclipse-mosquitto
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
         ports:
         - containerPort: 8883
         - containerPort: 9001

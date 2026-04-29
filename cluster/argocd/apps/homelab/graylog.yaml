@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: graylog
+spec:
+  project: default
+  source:
+    repoURL: 'git@github.com:politeauthority/private-ops.git'
+    path: graylog/graylog-helm
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values-colfax.yaml
+  destination:
+    namespace: graylog
+    name: in-cluster
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: graylog-secret-datanode
+      jsonPointers:
+        - /data
+    - group: apps
+      kind: StatefulSet
+      name: graylog
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]
+      jsonPointers:
+        - /spec/updateStrategy/rollingUpdate
+        - /spec/template/metadata/annotations/checksum~1config
+        - /spec/template/metadata/annotations/checksum~1secret
+    - group: apps
+      kind: StatefulSet
+      name: graylog-datanode
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[]
+      jsonPointers:
+        - /spec/updateStrategy/rollingUpdate
+        - /spec/template/metadata/annotations/checksum~1config
+        - /spec/template/metadata/annotations/checksum~1secret
+  syncPolicy:
+    automated:
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true

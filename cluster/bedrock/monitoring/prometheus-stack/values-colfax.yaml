@@ -1,60 +1,208 @@
 kube-prometheus-stack:
+  prometheusOperator:
+    admissionWebhooks:
+      enabled: false
+    tls:
+      enabled: false
+
   alertmanager:
-    enabled: false
+    enabled: true
+    alertmanagerSpec:
+      externalUrl: https://alertmanager.colfax.int
+      secrets:
+        - grafana-alerting-creds
+    config:
+      global:
+        resolve_timeout: 5m
+      route:
+        group_by: ['alertname', 'namespace']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 12h
+        receiver: quigley-matrix
+        routes:
+          - receiver: 'null'
+            matchers:
+              - alertname = "Watchdog"
+      receivers:
+        - name: 'null'
+        - name: quigley-matrix
+          webhook_configs:
+            - url: https://api.alix.lol/grafana-alerts
+              http_config:
+                basic_auth:
+                  username: grafana
+                  password_file: /etc/alertmanager/secrets/grafana-alerting-creds/QUIGLEY_GRAFANA_PASSWORD
+
+  defaultRules:
+    disabled:
+      KubePodCrashLooping: true
+      KubePodNotReady: true
+      KubeContainerWaiting: true
+
+  additionalPrometheusRulesMap:
+    pod-health-custom:
+      groups:
+        - name: kubernetes-apps-custom
+          rules:
+            - alert: KubePodCrashLooping
+              expr: max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff", job="kube-state-metrics", namespace=~".*"}[5m]) >= 1
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                description: 'Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is in waiting state (reason: "CrashLoopBackOff") on cluster {{ $labels.cluster }}.'
+                runbook_url: https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodcrashlooping
+                summary: Pod is crash looping.
+            - alert: KubePodNotReady
+              expr: |
+                sum by (namespace, pod, job, cluster) (
+                  max by (namespace, pod, job, cluster) (
+                    kube_pod_status_phase{job="kube-state-metrics", namespace=~".*", phase=~"Pending|Unknown"}
+                  ) * on (namespace, pod, cluster) group_left(owner_kind) topk by (namespace, pod, cluster) (
+                    1, max by (namespace, pod, owner_kind, cluster) (kube_pod_owner{owner_kind!="Job"})
+                  )
+                ) > 0
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for longer than 10 minutes on cluster {{ $labels.cluster }}.
+                runbook_url: https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodnotready
+                summary: Pod has been in a non-ready state for more than 10 minutes.
+            - alert: KubeContainerWaiting
+              expr: kube_pod_container_status_waiting_reason{reason!="CrashLoopBackOff", job="kube-state-metrics", namespace=~".*"} > 0
+              for: 10m
+              labels:
+                severity: warning
+              annotations:
+                description: 'pod/{{ $labels.pod }} in namespace {{ $labels.namespace }} on container {{ $labels.container}} has been in waiting state for longer than 10 minutes. (reason: "{{ $labels.reason }}") on cluster {{ $labels.cluster }}.'
+                runbook_url: https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubecontainerwaiting
+                summary: Pod container waiting longer than 10 minutes.
+            - alert: KubePodHighRestartRate
+              expr: increase(kube_pod_container_status_restarts_total{job="kube-state-metrics"}[1h]) > 3
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: 'Pod {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}} restarting frequently'
+                description: >
+                  Container {{`{{ $labels.container }}`}} in pod {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}}
+                  has restarted {{`{{ $value | humanize }}`}} times in the last hour. This may indicate
+                  a crash loop that clears before the CrashLoopBackOff alert fires.
+
+  nodeExporter:
+    serviceMonitor:
+      metricRelabelings:
+        - sourceLabels: [instance]
+          regex: "192\\.168\\.50\\.77:9100"
+          targetLabel: instance
+          replacement: colfax-1
+        - sourceLabels: [instance]
+          regex: "192\\.168\\.50\\.79:9100"
+          targetLabel: instance
+          replacement: hoyt-1
+        - sourceLabels: [instance]
+          regex: "192\\.168\\.50\\.71:9100"
+          targetLabel: instance
+          replacement: galapago
+        - sourceLabels: [instance]
+          regex: "192\\.168\\.50\\.60:9100"
+          targetLabel: instance
+          replacement: control-plane
 
   grafana:
     enabled: true
+    envFromSecrets:
+      - name: authentik-grafana-oauth
+      - name: grafana-postgres-secret
+    grafana.ini:
+      server:
+        root_url: https://grafana.colfax.int
+      database:
+        type: postgres
+        host: q-postgres-rw.q-postgres.svc.cluster.local:5432
+        name: grafana
+        user: grafana
+        password: ${GF_DATABASE_PASSWORD}
+        ssl_mode: require
+      feature_toggles:
+        onCallAlerting: "false"
+      auth:
+        login_maximum_inactive_lifetime_duration: 24h
+        login_maximum_lifetime_duration: 7d
+      auth.generic_oauth:
+        enabled: true
+        name: authentik
+        allow_sign_up: true
+        auto_login: true
+        client_id: grafana
+        scopes: openid email profile offline_access
+        auth_url: https://auth.alix.lol/application/o/authorize/
+        token_url: https://auth.alix.lol/application/o/token/
+        api_url: https://auth.alix.lol/application/o/userinfo/
+        role_attribute_path: >-
+          contains(groups[*], 'authentik Admins') && 'GrafanaAdmin' || 'Viewer'
+        use_pkce: true
+        use_refresh_token: true
+    sidecar:
+      datasources:
+        enabled: true
+        skipReload: false
+      dashboards:
+        enabled: true
+        allowUiUpdates: false
     ingress:
-      enabled: true
-      ingressClassName: nginx-private
-      hosts:
-        - grafana.colfax.int
-      path: /
-    env:
-      PUID: "1001"
-      PGID: "1002"
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
     persistence:
-      enabled: false
-      existingClaim: grafana-store
-    initChownData:
-      enabled: false
+      enabled: true
+      storageClassName: longhorn
+      size: 2Gi
 
   prometheus:
     ingress:
-      enabled: true
-      ingressClassName: nginx-private
-      hosts:
-        - prometheus.colfax.int
-      path: /
+      enabled: false
 
     prometheusSpec:
-      retention: 30d
+      retention: 15d
+      resources:
+        requests:
+          cpu: 200m
+          memory: 1500Mi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+      retentionSize: 30GB
       storageSpec:
         volumeClaimTemplate:
           spec:
-            storageClassName: nfs-client
+            storageClassName: longhorn
             accessModes: ["ReadWriteOnce"]
             resources:
               requests:
-                storage: 50Gi
+                storage: 60Gi
 
       additionalScrapeConfigs:
         - job_name: "prox-node-hoyt"
           static_configs:
             - targets: [192.168.50.52:9100]
-        - job_name: "prox-node-zeta"
-          static_configs:
-            - targets: [192.168.50.51:9100]
+          relabel_configs:
+            - target_label: instance
+              replacement: hoyt
         - job_name: "prox-node-colfax"
           static_configs:
             - targets: [192.168.50.50:9100]
+          relabel_configs:
+            - target_label: instance
+              replacement: colfax
 
-        - job_name: nginx-public
-          static_configs:
-            - targets:
-                [
-                  ingresspublic-ingress-nginx-controller-metrics.ingress-public.svc.cluster.local:10254,
-                ]
         # Harbor Metrics
         - job_name: "harbor-exporter"
           scrape_interval: 20s
@@ -83,19 +231,19 @@ kube-prometheus-stack:
         #   static_configs:
         #     - targets: [a1.alix.lol]
 
+        - job_name: stocky-api
+          metrics_path: /metrics
+          scheme: http
+          scrape_timeout: 20s
+          static_configs:
+            - targets: [stocky-api.stocky.svc.cluster.local:8000]
+          relabel_configs:
+            - target_label: namespace
+              replacement: stocky
+
         - job_name: jellyfin
           metrics_path: /metrics
           scheme: http
           static_configs:
             - targets: [jellyfin.q-media.svc.cluster.local]
-
-        # Q Postgres Metrics
-        # - job_name: 'q-postgres'
-        #   scrape_interval: 20s
-        #   static_configs:
-        #     - targets: ['qpostgres-postgresql-metrics.q-postgres.svc.cluster.local:9187']
-
-        # - job_name: 'q-postgres'
-        #   scrape_interval: 20s
-        #   static_configs:
-        #     - targets: ['.q-media.svc.cluster.local:9187']
+        # q-postgres metrics are collected via CNPG PodMonitor (q-postgres namespace)

@@ -14,7 +14,43 @@ spec:
   destination:
     namespace: harbor
     name: in-cluster
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: harbor-core
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: harbor-jobservice
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: harbor-registry
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: harbor-registry-htpasswd
+      jsonPointers:
+        - /data
+    - group: apps
+      kind: StatefulSet
+      name: harbor-redis
+      jsonPointers:
+        - /spec/volumeClaimTemplates
+    - group: apps
+      kind: StatefulSet
+      name: harbor-trivy
+      jsonPointers:
+        - /spec/volumeClaimTemplates
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /metadata/labels/app.kubernetes.io~1instance
   syncPolicy:
+    automated:
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - ServerSideApply=true

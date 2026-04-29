@@ -1,22 +1,101 @@
 harbor:
-  caSecretName: harbor-squid-ink-us-tls
+  updateStrategy:
+    type: Recreate
+
+  nginx:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+  portal:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+  core:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  jobservice:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  registry:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+  trivy:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+  exporter:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+  redis:
+    internal:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      resources:
+        requests:
+          cpu: 25m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
   expose:
+    type: clusterIP
     tls:
-      enabled: true
-      certSource: secret
-      secret:
-        secretName: harbor-squid-ink-us-tls
-        notarySecretName: notary-squid-ink-us-tls
-    ingress:
-      hosts:
-        core: harbor.squid-ink.us
-        notary: notary.squid-ink.us
-      className: nginx-public
-      annotations:
-        cert-manager.io/cluster-issuer: letsencrypt-prod
+      enabled: false
   externalURL: https://harbor.squid-ink.us
   persistence:
     enabled: true
+    persistentVolumeClaim:
+      registry:
+        existingClaim: harbor-registry-longhorn
+        storageClass: longhorn
+        size: 20Gi
+        annotations: {}
+      jobservice:
+        jobLog:
+          existingClaim: harbor-jobservice-longhorn
+          storageClass: longhorn
+          size: 1Gi
+          annotations:
+            recurring-job-group.longhorn.io/daily: "enabled"
+      redis:
+        storageClass: longhorn
+        size: 1Gi
+      trivy:
+        storageClass: longhorn
+        size: 5Gi
   metrics:
     enabled: true
     core:
@@ -35,12 +114,10 @@ harbor:
   database:
     type: external
     external:
-      host: "qpostgres-postgresql.q-postgres.svc.cluster.local"
+      host: "q-postgres-rw.q-postgres.svc.cluster.local"
       port: "5432"
       username: "harbor_admin"
       coreDatabase: "harbor_registry"
-      notaryServerDatabase: "harbor_notary_server"
-      notarySignerDatabase: "harbor_notary_signer"
       # if using existing secret, the key must be "password"
       existingSecret: "harbor-postgres"
       sslmode: "disable"
